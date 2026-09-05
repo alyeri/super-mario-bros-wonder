@@ -1,0 +1,73 @@
+diff --git a/src/Ryujinx.HLE/HOS/ModLoader.cs b/src/Ryujinx.HLE/HOS/ModLoader.cs
+index aeeb881..864f48f 100644
+--- a/src/Ryujinx.HLE/HOS/ModLoader.cs
++++ b/src/Ryujinx.HLE/HOS/ModLoader.cs
+@@ -870,6 +870,8 @@ namespace Ryujinx.HLE.HOS
+                 return AppliquerCorrectifsIntegres(programs);
+             }
+ 
++            bool correctifsIntegresAppliques = AppliquerCorrectifsIntegres(programs);
++
+             IEnumerable<Mod<DirectoryInfo>> nsoMods = _patches.NsoPatches;
+ 
+             if (_appMods.TryGetValue(applicationId, out ModCache mods))
+@@ -879,7 +881,7 @@ namespace Ryujinx.HLE.HOS
+ 
+             // NSO patches are created with offset 0 according to Atmosphere's patcher module
+             // But `Program` doesn't contain the header which is 0x100 bytes. So, we adjust for that here
+-            return ApplyProgramPatches(nsoMods, 0x100, programs);
++            return ApplyProgramPatches(nsoMods, 0x100, programs) || correctifsIntegresAppliques;
+         }
+ 
+         internal void LoadCheats(ulong applicationId, ProcessTamperInfo tamperInfo, TamperMachine tamperMachine)
+diff --git a/src/Ryujinx.HLE/HOS/NextendoS3Patches.cs b/src/Ryujinx.HLE/HOS/NextendoS3Patches.cs
+index 9a88a12..f3ef2b9 100644
+--- a/src/Ryujinx.HLE/HOS/NextendoS3Patches.cs
++++ b/src/Ryujinx.HLE/HOS/NextendoS3Patches.cs
+@@ -37,6 +37,29 @@ namespace Ryujinx.HLE.HOS
+             0x45, 0x45, 0x4F, 0x46,                   // "EEOF"
+         ];
+ 
++        // Super Mario Bros. Wonder 1.2.1
++        // Build FF773E90972D544EB79406EAA65396D53C43EFB9.
++        // Flat 0xB03528: LDRB W10,[X21,#0x38] -> MOV W10,#1.
++        private static readonly byte[] _certificateWonder121 =
++        [
++            0x49, 0x50, 0x53, 0x33, 0x32,
++            0x00, 0xB0, 0x36, 0x28, 0x00, 0x04,
++            0x2A, 0x00, 0x80, 0x52,
++            0x45, 0x45, 0x4F, 0x46,
++        ];
++
++        // Flat 0xB02BBC: CBNZ W0,0xB02C3C; flat 0xB02AA4: B.NE 0xB02C5C.
++        // Both branches lead to the peer-name rejection path.
++        private static readonly byte[] _peerNameWonder121 =
++        [
++            0x49, 0x50, 0x53, 0x33, 0x32,
++            0x00, 0xB0, 0x2C, 0xBC, 0x00, 0x04,
++            0x1F, 0x20, 0x03, 0xD5,
++            0x00, 0xB0, 0x2B, 0xA4, 0x00, 0x04,
++            0x1F, 0x20, 0x03, 0xD5,
++            0x45, 0x45, 0x4F, 0x46,
++        ];
++
+         // Corrige le nom d'hote presente au pair. 29 octets, empreinte aa8a453637092346…
+         private static readonly byte[] _nomDePair =
+         [
+@@ -71,6 +94,7 @@ namespace Ryujinx.HLE.HOS
+             // Aucun decalage : la croissance de 4096 octets du binaire est situee APRES ces sites.
+             ["28C4287AEE36F7499DA60F3E68B54C70DA382D75"] = [_contournementCertificat, _nomDePair],
+             ["726D2B882DD9EF10F4A9D73EED088740630FB6C8"] = [_contournementCertificat],
++            ["FF773E90972D544EB79406EAA65396D53C43EFB9"] = [_certificateWonder121, _peerNameWonder121],
+         };
+ 
+         /// <summary>
+@@ -94,7 +118,7 @@ namespace Ryujinx.HLE.HOS
+             }
+ 
+             Logger.Info?.Print(LogClass.ModLoader,
+-                $"[Nextendo] Splatoon 3 : {correctifs.Length} correctif(s) integre(s) appliques (build {identifiantDeBuild})");
++                $"[Nextendo] NPLN : {correctifs.Length} correctif(s) integre(s) appliques (build {identifiantDeBuild})");
+ 
+             return correctifs.Length;
+         }

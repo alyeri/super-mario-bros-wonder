@@ -1,0 +1,26 @@
+/wonder-server
+/wonder-server.exe
+*.exe
+*.dll
+*.log
+*.pem
+*.key
+.env
+go.work
+go.work.sum
+/accounts.json
+/sessions.json
+/data/
+/captures/
+/dist/
+/coverage.out
+
+# Protocol packages not used by this Wonder server
+/proto/appconfig/
+/proto/errdetails/
+/proto/globalcounter/
+/proto/ikaros/
+/proto/leaderboard/
+/proto/maintenance/
+/proto/timber/
+/proto/toyohr/
