@@ -192,7 +192,7 @@ func TestFriendRoomsDiscoveryJoinPasswordAndPoolIsolation(t *testing.T) {
 	mm := newMatchmaker(r)
 	create := func(uid, password string) *mmpb.GameSessionCreationTicket {
 		ctx := callerContext(uid)
-		ticket, err := svc.CreateGameSessionCreationTicket(ctx, &mmpb.CreateGameSessionCreationTicketRequest{GameSessionCreationTicket: &mmpb.GameSessionCreationTicket{MatchmakingConfig: "matchmakingConfigs/FriendMatch", UserDefinitions: []*mmpb.UserDefinition{{User: "users/current"}}, GameSession: &mmpb.GameSession{Password: password}}})
+		ticket, err := svc.CreateGameSessionCreationTicket(ctx, &mmpb.CreateGameSessionCreationTicketRequest{GameSessionCreationTicket: &mmpb.GameSessionCreationTicket{MatchmakingConfig: "matchmakingConfigs/FriendMatch", UserDefinitions: []*mmpb.UserDefinition{{User: "users/current"}}, GameSession: &mmpb.GameSession{Password: password, Properties: &commonpb.MapValue{Fields: map[string]*commonpb.Value{"MatchingKey": gamesyncStringValue("6.no_rev_info")}}}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -208,7 +208,7 @@ func TestFriendRoomsDiscoveryJoinPasswordAndPoolIsolation(t *testing.T) {
 	}
 	a := create("u-host", "1122")
 	b := create("u-guest", "3344")
-	rooms, err := svc.QueryGameSessions(callerContext("u-guest"), &mmpb.QueryGameSessionsRequest{Tenant: nplnTenant, Users: []string{"users/u-host"}, MinVacancyCount: 1})
+	rooms, err := svc.QueryGameSessions(callerContext("u-guest"), &mmpb.QueryGameSessionsRequest{Tenant: "tenants/current", View: mmpb.GameSessionView_FULL, GameSessionSearchConfig: "tenants/current/gameSessionSearchConfigs/FriendSearch", Users: []string{"tenants/current/users/u-host"}, Properties: &commonpb.MapValue{Fields: map[string]*commonpb.Value{"MatchingKey": gamesyncStringValue("6.no_rev_info")}}, MinVacancyCount: 1, PageSize: 5})
 	if err != nil || len(rooms.GameSessions) != 1 || rooms.GameSessions[0].Name != a.GameSession.Name || rooms.GameSessions[0].Password != "" {
 		t.Fatalf("friend room lookup or password redaction failed: %v", err)
 	}
@@ -249,6 +249,38 @@ func TestFriendRoomsDiscoveryJoinPasswordAndPoolIsolation(t *testing.T) {
 	r.friendUIDs = func(_ context.Context, uid string) (map[string]bool, error) { return map[string]bool{uid: true}, nil }
 	if _, err := svc.GetGameSession(callerContext("u-outsider"), &mmpb.GetGameSessionRequest{Name: a.GameSession.Name}); status.Code(err) != codes.NotFound {
 		t.Fatal("private room visible to outsider")
+	}
+	if _, err := svc.QueryGameSessions(callerContext("u-outsider"), &mmpb.QueryGameSessionsRequest{Tenant: "tenants/current", GameSessionSearchConfig: "tenants/current/gameSessionSearchConfigs/FriendSearch", Users: []string{"tenants/current/users/u-host"}}); status.Code(err) != codes.PermissionDenied {
+		t.Fatal("FriendSearch accepted a non-friend target")
+	}
+}
+
+func TestFriendSearchFindsFriendsPublicSessionAndRejectsUnknownConfig(t *testing.T) {
+	r := testRegistry()
+	mm := newMatchmaker(r)
+	svc := newGameSessionServer(r)
+	host := testMatched(t, mm, "u-host", "CourseMatch_20221202", "6.no_rev_info")
+
+	result, err := svc.QueryGameSessions(callerContext("u-guest"), &mmpb.QueryGameSessionsRequest{
+		Tenant:                  "tenants/current",
+		View:                    mmpb.GameSessionView_FULL,
+		GameSessionSearchConfig: "tenants/current/gameSessionSearchConfigs/FriendSearch",
+		MinVacancyCount:         1,
+		Properties:              &commonpb.MapValue{Fields: map[string]*commonpb.Value{"MatchingKey": gamesyncStringValue("6.no_rev_info")}},
+		Users:                   []string{"tenants/current/users/u-host"},
+		PageSize:                5,
+	})
+	if err != nil || len(result.GetGameSessions()) != 1 || result.GetGameSessions()[0].GetName() != host.GetGameSession().GetName() {
+		t.Fatalf("captured FriendSearch request did not find the friend's session: result=%v err=%v", result, err)
+	}
+
+	_, err = svc.QueryGameSessions(callerContext("u-guest"), &mmpb.QueryGameSessionsRequest{
+		Tenant:                  "tenants/current",
+		GameSessionSearchConfig: "tenants/current/gameSessionSearchConfigs/UnknownSearch",
+		Users:                   []string{"tenants/current/users/u-host"},
+	})
+	if status.Code(err) != codes.Unimplemented {
+		t.Fatalf("unknown search config returned %v", err)
 	}
 }
 

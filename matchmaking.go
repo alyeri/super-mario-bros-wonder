@@ -208,6 +208,13 @@ func cloneAttributes(definition *mmpb.UserDefinition) *commonpb.MapValue {
 func (m *matchmakerServer) newPublicMatchSessionLocked(ticket *mmpb.MatchmakingTicket, poolKey string, now time.Time) *publicMatchSession {
 	m.nextSessionID++
 	gsName := nplnTenant + "/gameSessions/gs-" + fmt.Sprintf("%d-%d", now.UnixNano(), m.nextSessionID)
+	properties := matchmakingSessionProperties(ticket.GetMatchmakingConfig())
+	for _, definition := range ticket.GetUserDefinitions() {
+		if matchingKey := matchmakingStringAttribute(definition, "MatchingKey"); matchingKey != "" {
+			properties.Fields["MatchingKey"] = gamesyncStringValue(matchingKey)
+			break
+		}
+	}
 	session := &publicMatchSession{
 		poolKey: poolKey,
 		gameSession: &mmpb.GameSession{
@@ -219,7 +226,7 @@ func (m *matchmakerServer) newPublicMatchSessionLocked(ticket *mmpb.MatchmakingT
 			Host:                envOr("NPLN_GAMESESSION_HOST", "127.0.0.1"),
 			Port:                int32(envInt("NPLN_GAMESESSION_PORT", 443)),
 			CreateTime:          timestamppb.New(now),
-			Properties:          matchmakingSessionProperties(ticket.GetMatchmakingConfig()),
+			Properties:          properties,
 		},
 	}
 	m.sessionsByPool[poolKey] = append(m.sessionsByPool[poolKey], session)
@@ -416,10 +423,12 @@ func (m *matchmakerServer) CancelMatchmakingTicket(ctx context.Context, req *mmp
 
 type gameSessionServer struct {
 	mmpb.UnimplementedGameSessionServiceServer
-	mu       *sync.Mutex
-	registry *sessionRegistry
-	tickets  map[string]*mmpb.GameSessionCreationTicket
-	sessions map[string]*mmpb.GameSession
+	mu            *sync.Mutex
+	registry      *sessionRegistry
+	tickets       map[string]*mmpb.GameSessionCreationTicket
+	sessions      map[string]*mmpb.GameSession
+	nextTicketID  uint64
+	nextSessionID uint64
 }
 
 func newGameSessionServer(registries ...*sessionRegistry) *gameSessionServer {
@@ -443,7 +452,11 @@ func (g *gameSessionServer) CreateGameSessionCreationTicket(ctx context.Context,
 		ticket = &mmpb.GameSessionCreationTicket{}
 	}
 
-	ticketID := fmt.Sprintf("gsct-%d", time.Now().UnixNano())
+	g.mu.Lock()
+	g.nextTicketID++
+	ticketSequence := g.nextTicketID
+	g.mu.Unlock()
+	ticketID := fmt.Sprintf("gsct-%d-%d", time.Now().UnixNano(), ticketSequence)
 	ticket.Name = nplnTenant + "/gameSessionCreationTickets/" + ticketID
 	ticket.MatchmakingConfig = concreteResource("matchmakingConfigs", ticket.GetMatchmakingConfig())
 	if err := validateCallerDefinitions(ticket.GetUserDefinitions(), uid); err != nil {
@@ -507,7 +520,8 @@ func (g *gameSessionServer) completeGameSessionCreationTicket(ctx context.Contex
 	}
 
 	now := time.Now()
-	gsName := nplnTenant + "/gameSessions/gs-" + fmt.Sprintf("%d", now.UnixNano())
+	g.nextSessionID++
+	gsName := nplnTenant + "/gameSessions/gs-" + fmt.Sprintf("%d-%d", now.UnixNano(), g.nextSessionID)
 	matched := make([]*mmpb.MatchedUserSession, 0, len(resp.UserDefinitions))
 	userSessions := make([]*mmpb.UserSession, 0, len(resp.UserDefinitions))
 	for i, definition := range resp.UserDefinitions {

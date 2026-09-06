@@ -113,6 +113,29 @@ func validSessionName(name string) bool {
 	return false
 }
 
+func validateGameSessionSearchConfig(req *mmpb.QueryGameSessionsRequest, uid string, friends map[string]bool) error {
+	config := lastResourceSegment(req.GetGameSessionSearchConfig())
+	if config == "" {
+		return nil
+	}
+	if config != "FriendSearch" {
+		return status.Errorf(codes.Unimplemented, "unsupported game session search configuration %q", config)
+	}
+	if len(req.GetUsers()) == 0 {
+		return status.Error(codes.InvalidArgument, "FriendSearch requires at least one user")
+	}
+	for _, user := range req.GetUsers() {
+		target := lastResourceSegment(user)
+		if target == "current" {
+			target = uid
+		}
+		if target == "" || !friends[target] {
+			return status.Error(codes.PermissionDenied, "FriendSearch target is not a friend")
+		}
+	}
+	return nil
+}
+
 func (g *gameSessionServer) GetGameSession(ctx context.Context, req *mmpb.GetGameSessionRequest) (*mmpb.GameSession, error) {
 	uid, err := authenticatedNPLNUID(ctx)
 	if err != nil {
@@ -171,11 +194,11 @@ func (g *gameSessionServer) QueryGameSessions(ctx context.Context, req *mmpb.Que
 	if req.PageSize < 0 || req.MinVacancyCount < 0 || req.MinParticipantCount < 0 {
 		return nil, status.Error(codes.InvalidArgument, "negative query limit")
 	}
-	if req.GameSessionSearchConfig != "" {
-		return nil, status.Error(codes.Unimplemented, "search configuration semantics not recovered; explicit property/user queries supported")
-	}
 	friends, err := g.registry.friendUIDs(ctx, uid)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateGameSessionSearchConfig(req, uid, friends); err != nil {
 		return nil, err
 	}
 	limit := int(req.PageSize)

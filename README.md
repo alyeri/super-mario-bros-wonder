@@ -2,11 +2,13 @@
 
 Experimental Nextendo NPLN server for Super Mario Bros. Wonder.
 
-Tested on September 5, 2026 with game update 1.2.1 and two Ryujinx-Nextendo profiles on the same Windows PC. Both accounts entered the same course, completed the PIA mesh and rendered each other as online ghosts.
+Tested on September 5, 2026 with game update 1.2.1 and two Ryujinx-Nextendo profiles on the same Windows PC. Both accounts entered public courses and rendered each other as online ghosts. They also completed the Play with Friends flow: room discovery, room join, shared world map, shared course and a finished Friend Race.
 
 The connection previously stopped in `AttachMeshJob::WaitSetupRelayAddress`. Wonder received STUN configuration but no TURN server. This implementation advertises an authenticated RFC 8656 UDP TURN endpoint and runs the matching relay. Once the client received that configuration, `CreateMesh` and `JoinMesh` completed.
 
 The server also contains the NPLN authentication, matchmaking, Gamesync, messaging, friends, UGC, NNCS NAT-check and STUN behavior used by the successful local test.
+
+Wonder discovers friend activity through `QueryGameSessions` using the `FriendSearch` configuration, a friend UID and a `MatchingKey` property. The server validates the friendship, applies the requested session filters and returns only visible active rooms. Friend world-map and course pools remain linked to the selected base room through `FriendGameSessionId`.
 
 ## Build
 
@@ -55,9 +57,9 @@ git apply client-patches/nextendo-ryujinx-wonder-1.2.1.patch
 
 ## Current limits
 
-The demonstrated result is two local clients in public course matchmaking with online ghosts. Separate computers, internet deployment and friend rooms have not been verified.
+The demonstrated result is two local clients in public course matchmaking with online ghosts and an end-to-end friend room with a completed Friend Race. Separate computers and internet deployment have not been verified.
 
-`docs/__mt/nat_traversal` monitoring writes remain unimplemented after mesh completion. Some `QueryGameSessions` search-configuration semantics also remain unrecovered. Neither prevented the successful ghost test.
+The captured `docs/__mt/nat_traversal` monitoring document is accepted only when its local and remote users are active members of the same GameSession. `FriendSearch` is the only implemented named GameSession search configuration; unknown configurations remain unsupported until observed.
 
 Keep request traces private because they can contain account identifiers and network addresses. No private keys, account data, game files, emulator binaries, logs or packet captures are included.
 

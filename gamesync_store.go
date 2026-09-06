@@ -313,6 +313,40 @@ func writableDocument(name string, fields *commonpb.MapValue, session gamesyncSe
 				return status.Error(codes.InvalidArgument, "signalling metadata must be a map")
 			}
 		}
+	case "__mt":
+		if id != "nat_traversal" || fields == nil {
+			return status.Error(codes.InvalidArgument, "invalid NAT traversal monitoring document")
+		}
+		entries, ok := fields.GetFields()["a"].GetValueType().(*commonpb.Value_ArrayValue)
+		if !ok || entries.ArrayValue == nil || len(entries.ArrayValue.Values) == 0 {
+			return status.Error(codes.InvalidArgument, "NAT traversal monitoring entries must be a non-empty array")
+		}
+		for _, entry := range entries.ArrayValue.Values {
+			values := entry.GetMapValue().GetFields()
+			if !observedStringValue(values["lu"], session.UID) {
+				return denied()
+			}
+			remoteUID := values["ru"].GetStringValue()
+			remoteActive := false
+			for _, peer := range sessions {
+				if peer.GameSession == session.GameSession && peer.UID == remoteUID {
+					remoteActive = true
+					break
+				}
+			}
+			if !remoteActive {
+				return denied()
+			}
+			if values["p2p"].GetStringValue() != "nn::pia::npln::NplnPlugin" {
+				return status.Error(codes.InvalidArgument, "unknown NAT traversal provider")
+			}
+			if _, ok := values["rc"].GetValueType().(*commonpb.Value_IntegerValue); !ok {
+				return status.Error(codes.InvalidArgument, "NAT traversal result code must be an integer")
+			}
+			if _, ok := values["re"].GetValueType().(*commonpb.Value_BooleanValue); !ok {
+				return status.Error(codes.InvalidArgument, "NAT traversal relay flag must be a boolean")
+			}
+		}
 	default:
 		return status.Error(codes.Unimplemented, "unsupported document family")
 	}
