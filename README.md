@@ -31,6 +31,25 @@ The successful local layout used:
 
 Route the NPLN hostnames used by the client to this server through the normal Nextendo DNS or redirection layer. The defaults are for local development and are not an internet deployment configuration.
 
+## Advertised endpoints and shared-server ports
+
+`AllocateIceServerSet` uses `NPLN_STUN_HOST` and `NPLN_STUN_PORT` for the client-facing UDP STUN endpoint (defaults: `127.0.0.1`, `3478`). `NPLN_STUN_LISTEN` independently controls the local bind address. Set both when moving STUN to another port; a wildcard bind address such as `0.0.0.0` must not be advertised to clients.
+
+For example, if UDP 3478 is already occupied by another game's coturn, choose available ports for Wonder:
+
+```sh
+NPLN_STUN_LISTEN=0.0.0.0:3480
+NPLN_STUN_HOST=<client-reachable-server-address>
+NPLN_STUN_PORT=3480
+NPLN_TURN_LISTEN=0.0.0.0:3481
+NPLN_TURN_HOST=<client-reachable-server-address>
+NPLN_TURN_PORT=3481
+```
+
+Replace the placeholders before starting the server. Allow the advertised UDP ports through the firewall and any port forwarding. TURN also allocates separate UDP relay sockets on OS-assigned ports; allowing only its listener port is insufficient for relayed traffic. The current embedded TURN implementation uses `NPLN_TURN_RELAY_IP` both as the advertised relay IPv4 address and the local relay bind address, so that IP must be assigned to the server and reachable by clients. This example alone does not configure a TURN deployment behind NAT.
+
+`ListLatencyMeasurementServers` uses `NPLN_LATENCY_HOST` and `NPLN_LATENCY_PORT` (default port: `443`). When the latency host is unset, it falls back to `NPLN_GAMESESSION_HOST`, then `127.0.0.1`. Set it to the reachable latency endpoint along with the other deployment addresses in `example.env`; changing STUN does not update GameSession or NNCS addresses. Existing same-PC defaults are preserved.
+
 ## Client patch
 
 Wonder pins Nintendo's certificate and rejects the peer name presented by a local server. `client-patches/nextendo-ryujinx-wonder-1.2.1.patch` adds the three required ARM64 replacements to the integrated Nextendo Ryujinx patch table.

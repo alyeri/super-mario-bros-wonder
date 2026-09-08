@@ -647,11 +647,13 @@ func (g *gameSessionServer) AllocateIceServerSet(ctx context.Context, req *mmpb.
 	turnPort := envInt("NPLN_TURN_PORT", 3479)
 	turnUsername := envOr("NPLN_TURN_USERNAME", defaultTURNUsername)
 	turnPassword := envOr("NPLN_TURN_PASSWORD", defaultTURNPassword)
+	stunHost := envOr("NPLN_STUN_HOST", "127.0.0.1")
+	stunPort := envInt("NPLN_STUN_PORT", 3478)
 	return &mmpb.IceServerSet{
 		Name: tenant + "/iceServerSets/default",
 		StunServer: &mmpb.StunServer{
-			Host:     "127.0.0.1",
-			Port:     3478,
+			Host:     stunHost,
+			Port:     int32(stunPort),
 			Protocol: mmpb.StunServer_UDP,
 		},
 		TurnServers: []*mmpb.TurnServer{{
@@ -668,12 +670,14 @@ func (g *gameSessionServer) AllocateIceServerSet(ctx context.Context, req *mmpb.
 
 func (g *gameSessionServer) ListLatencyMeasurementServers(ctx context.Context, req *mmpb.ListLatencyMeasurementServersRequest) (*mmpb.ListLatencyMeasurementServersResponse, error) {
 	log.Printf("[NPLN GameSession] ListLatencyMeasurementServers parent=%q", req.GetParent())
+	latencyHost := envOr("NPLN_LATENCY_HOST", envOr("NPLN_GAMESESSION_HOST", "127.0.0.1"))
+	latencyPort := envInt("NPLN_LATENCY_PORT", 443)
 	return &mmpb.ListLatencyMeasurementServersResponse{
 		LatencyMeasurementServers: []*mmpb.LatencyMeasurementServer{
 			{
 				Name:     req.GetParent() + "/latencyMeasurementServers/local",
-				Host:     "127.0.0.1",
-				Port:     443,
+				Host:     latencyHost,
+				Port:     int32(latencyPort),
 				Protocol: mmpb.LatencyMeasurementServer_HTTP,
 			},
 		},
